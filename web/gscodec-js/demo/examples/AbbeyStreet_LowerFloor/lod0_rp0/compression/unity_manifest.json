@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "compression": "seq_hevc",
+  "gop_size": 16,
+  "frame_num": 1,
+  "num_gop": 1,
+  "n_orig_per_frame": [
+    1766302
+  ],
+  "transform_attributes": {
+    "means": false,
+    "scales": false,
+    "quats": false,
+    "opacities": false,
+    "sh0": false,
+    "shN": false
+  },
+  "use_sort": true,
+  "use_all_intra": false,
+  "quat_convention": "wxyz",
+  "sh_degree": 3
+}

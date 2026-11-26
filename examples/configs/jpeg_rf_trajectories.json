@@ -1,0 +1,125 @@
+{
+  "document": "ISO/IEC JTC1/SC29/WG1 M109040 — JPEG RF Exploration Study 5 (PCQ)",
+  "source_pdf": "docs/PCQ-Report on Exploration Study 5 of JPEG RF.pdf",
+  "description": "Test camera trajectories for subjective QA of radiance fields. Training poses are used to select key views, optional ghost views, then a centripetal Catmull–Rom spline with arc-length reparameterization and quaternion SLERP orientations.",
+  "default_video": {
+    "n_frames": 600,
+    "fps": 25,
+    "duration_s": 24.0,
+    "arc_length_samples": 4096
+  },
+  "key_selection": {
+    "k_neighbors": 8,
+    "dense_top_percent": 80.0,
+    "delta_min_keys": 0.15,
+    "delta_min_ghosts": 0.10,
+    "ghost_candidates": 256
+  },
+  "trajectories": {
+    "fps_keys8": {
+      "label": "FPS baseline (garden Fig.2a)",
+      "family": "fps",
+      "num_keys": 8,
+      "num_ghosts": 0,
+      "alpha": 1.0,
+      "ghost_weights": {"w_orient": 0.0, "w_empty": 0.0, "w_span": 0.0},
+      "notes": "Spatial coverage only (α=1). No ghosts. Fixed FPS/duration for subjective tests."
+    },
+    "coverage_keys12": {
+      "label": "Coverage — 12 keys (garden Fig.2b)",
+      "family": "coverage",
+      "num_keys": 12,
+      "num_ghosts": 0,
+      "alpha": 0.65,
+      "ghost_weights": {"w_orient": 0.0, "w_empty": 0.0, "w_span": 0.0},
+      "notes": "Balanced coverage + orientation; more keys for wide scenes."
+    },
+    "coverage_orient_keys8": {
+      "label": "Orientation-diverse — 8 keys (garden Fig.2c)",
+      "family": "orientation",
+      "num_keys": 8,
+      "num_ghosts": 0,
+      "alpha": 0.4,
+      "ghost_weights": {"w_orient": 0.0, "w_empty": 0.0, "w_span": 0.0},
+      "notes": "Lower α stresses varied look directions over spatial spread."
+    },
+    "ghost_gentle_orient": {
+      "label": "Ghost + gentle orientation (garden Fig.2d)",
+      "family": "ghost",
+      "num_keys": 8,
+      "num_ghosts": 4,
+      "alpha": 0.8,
+      "ghost_weights": {"w_orient": 0.45, "w_empty": 0.45, "w_span": 0.10},
+      "notes": "Recommended default for generalization testing without unstable extrapolation."
+    },
+    "ghost_strong_orient": {
+      "label": "Ghost + strong orientation (garden Fig.2e)",
+      "family": "ghost",
+      "num_keys": 8,
+      "num_ghosts": 5,
+      "alpha": 0.65,
+      "ghost_weights": {"w_orient": 0.78, "w_empty": 0.17, "w_span": 0.07},
+      "notes": "Stresses view-dependent appearance (SH / specular)."
+    },
+    "ghost_strong_span": {
+      "label": "Ghost + strong span / parallax (garden Fig.2f)",
+      "family": "ghost",
+      "num_keys": 9,
+      "num_ghosts": 6,
+      "alpha": 0.7,
+      "ghost_weights": {"w_orient": 0.20, "w_empty": 0.25, "w_span": 0.55},
+      "notes": "Long-baseline bridges; probes parallax and occlusions."
+    },
+    "playground_fps": {
+      "label": "Playground FPS (Fig.3a)",
+      "family": "fps",
+      "num_keys": 8,
+      "num_ghosts": 0,
+      "alpha": 1.0,
+      "ghost_weights": {"w_orient": 0.0, "w_empty": 0.0, "w_span": 0.0}
+    },
+    "playground_coverage_orient": {
+      "label": "Playground orientation (Fig.3b)",
+      "family": "orientation",
+      "num_keys": 8,
+      "num_ghosts": 0,
+      "alpha": 0.4,
+      "ghost_weights": {"w_orient": 0.0, "w_empty": 0.0, "w_span": 0.0}
+    },
+    "playground_ghost_gentle": {
+      "label": "Playground ghost gentle (Fig.3c)",
+      "family": "ghost",
+      "num_keys": 8,
+      "num_ghosts": 4,
+      "alpha": 0.8,
+      "ghost_weights": {"w_orient": 0.45, "w_empty": 0.45, "w_span": 0.10}
+    },
+    "playground_ghost_strong_orient": {
+      "label": "Playground ghost strong orient (Fig.3d)",
+      "family": "ghost",
+      "num_keys": 8,
+      "num_ghosts": 5,
+      "alpha": 0.65,
+      "ghost_weights": {"w_orient": 0.78, "w_empty": 0.17, "w_span": 0.07}
+    },
+    "mellifont_recommended": {
+      "label": "MellifontAbbey — recommended subjective path",
+      "family": "ghost",
+      "num_keys": 8,
+      "num_ghosts": 4,
+      "alpha": 0.8,
+      "ghost_weights": {"w_orient": 0.45, "w_empty": 0.45, "w_span": 0.10},
+      "notes": "Same as ghost_gentle_orient; use with eva/_eval_100views/cameras_100.json as training poses."
+    }
+  },
+  "subjective_test_guidelines": {
+    "fix_fps_across_trajectories": true,
+    "fix_duration_across_trajectories": true,
+    "prefer_multiple_short_arcs": true,
+    "path_families": [
+      "coverage-focused (high α, few ghosts)",
+      "orientation-diverse (low α)",
+      "ghost-augmented (sparse regions, generalization)"
+    ]
+  }
+}

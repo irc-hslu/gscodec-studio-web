@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Spark scale test</title>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+          "@sparkjsdev/spark": "https://sparkjs.dev/releases/spark/2.4.0/spark.module.js"
+        }
+      }
+    </script>
+    <style>
+      html, body { margin: 0; height: 100%; background: #111; color: #eee; font-family: system-ui, sans-serif; }
+      canvas { width: 100%; height: 100%; display: block; }
+      #ui { position: fixed; left: 12px; top: 12px; background: rgba(0,0,0,.6); padding: 10px; border-radius: 8px; max-width: 460px; }
+    </style>
+  </head>
+  <body>
+    <div id="ui">
+      <div><strong>Spark scale test</strong></div>
+      <p id="status">Building an isotropic sphere, linear scale 0.02…</p>
+    </div>
+    <canvas id="c"></canvas>
+    <script type="module">
+      import * as THREE from "three";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+      import { SparkRenderer, SplatMesh } from "@sparkjsdev/spark";
+      import { frameToPackedSplats } from "../src/gscodec-viewer.js";
+
+      const canvas = document.getElementById("c");
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false });
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x111111);
+      scene.add(new SparkRenderer({ renderer }));
+      const camera = new THREE.PerspectiveCamera(55, 1, 0.01, 100);
+      camera.position.set(0, 0.2, 3);
+      const controls = new OrbitControls(camera, canvas);
+
+      const n = 4000;
+      const linear = 0.02;
+      const logS = Math.log(linear);
+      const frame = {
+        count: n,
+        means: new Float32Array(n * 3),
+        scales: new Float32Array(n * 3),
+        opacities: new Float32Array(n),
+        quats: new Float32Array(n * 4),
+        sh0: new Float32Array(n * 3),
+      };
+      for (let i = 0; i < n; i++) {
+        const theta = 2 * Math.PI * Math.random();
+        const phi = Math.acos(2 * Math.random() - 1);
+        frame.means[i * 3] = Math.sin(phi) * Math.cos(theta);
+        frame.means[i * 3 + 1] = Math.sin(phi) * Math.sin(theta);
+        frame.means[i * 3 + 2] = Math.cos(phi);
+        frame.scales[i * 3] = logS;
+        frame.scales[i * 3 + 1] = logS;
+        frame.scales[i * 3 + 2] = logS;
+        frame.opacities[i] = 5;
+        frame.quatConvention = "wxyz";
+        frame.quats[i * 4] = 1;
+        frame.sh0[i * 3] = 1.2;
+        frame.sh0[i * 3 + 1] = 0.2;
+        frame.sh0[i * 3 + 2] = -0.4;
+      }
+
+      scene.add(new SplatMesh({ packedSplats: frameToPackedSplats(frame, n) }));
+      document.getElementById("status").textContent =
+        "Isotropic sphere, linear scale 0.02, packed for Spark. It should be a round shell.";
+
+      function resize() {
+        const w = canvas.clientWidth || 1;
+        const h = canvas.clientHeight || 1;
+        renderer.setSize(w, h, false);
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+      }
+      window.addEventListener("resize", resize);
+      resize();
+      renderer.setAnimationLoop(() => {
+        controls.update();
+        renderer.render(scene, camera);
+      });
+    </script>
+  </body>
+</html>

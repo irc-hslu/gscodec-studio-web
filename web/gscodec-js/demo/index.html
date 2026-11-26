@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>GSCodec Web viewer demo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+          "@sparkjsdev/spark": "https://sparkjs.dev/releases/spark/2.4.0/spark.module.js"
+        }
+      }
+    </script>
+    <style>
+      html, body { margin: 0; height: 100%; background: #0a0b0e; color: #e8eaed; font-family: system-ui, sans-serif; }
+      #ui { position: fixed; left: 12px; top: 12px; z-index: 2; background: rgba(0,0,0,.55); padding: 10px 12px; border-radius: 8px; max-width: 460px; font-size: 14px; }
+      #ui label { display: block; margin-top: 8px; }
+      #ui input[type="text"], #ui input[type="url"], #ui input[type="number"], #ui select { width: 100%; box-sizing: border-box; }
+      #ui .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+      #ui button { cursor: pointer; }
+      #folderName { font-size: 12px; opacity: 0.9; margin-top: 6px; word-break: break-all; }
+      #log { margin-top: 8px; font-size: 12px; opacity: 0.85; white-space: pre-wrap; max-height: 140px; overflow: auto; }
+      canvas { display: block; width: 100%; height: 100%; }
+      .hint { font-size: 12px; opacity: 0.75; margin-top: 6px; line-height: 1.35; }
+    </style>
+  </head>
+  <body>
+    <div id="ui">
+      <div><strong>GSCodec WebDecoder</strong> (no Node.js)</div>
+
+      <label>Bundled example
+        <select id="preset">
+          <option value="">— choose —</option>
+          <option value="./examples/AbbeyStreet_LowerFloor/lod0_rp0/compression/" selected>
+            AbbeyStreet_LowerFloor/lod0_rp0 (compression/)  
+          </option>
+        </select>
+      </label>
+
+      <label>Or HTTP / relative URL
+        <input id="baseUrl" type="text" placeholder="./example/.../compression/" />
+      </label>
+
+      <label>Or pick a local drive folder
+        <input id="folder" type="file" webkitdirectory multiple />
+      </label>
+      <div id="folderName"></div>
+      <p class="hint">
+        Pick the <code>compression</code> folder (or its parent). Works from local disk
+        without a server. Bundled example needs a static HTTP server if you do not pick a folder.
+        Arrow keys move the view (hold Shift to move faster). Drag to orbit, scroll to zoom.
+      </p>
+
+      <label>Max splats (GPU preview)
+        <input id="maxSplats" type="number" value="1000000" />
+      </label>
+
+      <div class="row">
+        <button id="loadBtn" type="button">Load &amp; decode</button>
+      </div>
+      <div class="row">
+        <button id="playBtn" type="button" disabled>Play</button>
+        <button id="pauseBtn" type="button" disabled>Pause</button>
+        <button id="stopBtn" type="button" disabled>Stop</button>
+        <label style="margin: 0;">FPS
+          <input id="fps" type="number" min="1" max="60" value="30" style="width: 4.5em;" />
+        </label>
+        <span id="frameLabel">Frame —</span>
+      </div>
+      <div id="log"></div>
+    </div>
+    <canvas id="c"></canvas>
+    <script type="module">
+      import {
+        GSCodecViewer,
+        createUrlSource,
+        createFileMapSource,
+        hevcLikelySupported,
+      } from "../src/index.js";
+
+      const logEl = document.getElementById("log");
+      const folderNameEl = document.getElementById("folderName");
+      const baseUrlEl = document.getElementById("baseUrl");
+      const presetEl = document.getElementById("preset");
+      const folderEl = document.getElementById("folder");
+
+      const log = (m) => {
+        logEl.textContent += m + "\n";
+        logEl.scrollTop = logEl.scrollHeight;
+      };
+
+      // Prefill relative path to the shipped example.
+      baseUrlEl.value = presetEl.value;
+
+      presetEl.onchange = () => {
+        if (presetEl.value) {
+          baseUrlEl.value = presetEl.value;
+          folderEl.value = "";
+          folderNameEl.textContent = "";
+          localFiles = null;
+        }
+      };
+
+      /** @type {FileList | File[] | null} */
+      let localFiles = null;
+
+      folderEl.onchange = () => {
+        const files = folderEl.files;
+        if (!files || !files.length) {
+          localFiles = null;
+          folderNameEl.textContent = "";
+          return;
+        }
+        localFiles = files;
+        const sample = files[0].webkitRelativePath || files[0].name;
+        const root = sample.includes("/") ? sample.split("/")[0] : sample;
+        folderNameEl.textContent = `Local folder: ${root} (${files.length} files)`;
+        baseUrlEl.value = "";
+        presetEl.value = "";
+      };
+
+      hevcLikelySupported().then((ok) => {
+        if (!ok) {
+          log(
+            "This browser may lack HEVC <video> support (common in Chrome). " +
+              "Decode uses vendored ffmpeg.wasm under web/gscodec-js/vendor/ffmpeg/.",
+          );
+        }
+      });
+
+      let viewer = null;
+      const playBtn = document.getElementById("playBtn");
+      const pauseBtn = document.getElementById("pauseBtn");
+      const stopBtn = document.getElementById("stopBtn");
+      const frameLabel = document.getElementById("frameLabel");
+      const fpsEl = document.getElementById("fps");
+
+      const setTransport = (enabled) => {
+        playBtn.disabled = !enabled;
+        pauseBtn.disabled = !enabled;
+        stopBtn.disabled = !enabled;
+        if (!enabled) frameLabel.textContent = "Frame —";
+      };
+
+      const showFrame = (index, count, playing) => {
+        const state = playing ? "playing" : "paused";
+        frameLabel.textContent = count
+          ? `Frame ${index + 1} / ${count} (${state})`
+          : "Frame —";
+      };
+
+      playBtn.onclick = () => {
+        if (!viewer) return;
+        viewer.fps = Number(fpsEl.value) || 30;
+        viewer.play();
+      };
+      pauseBtn.onclick = () => viewer?.pause();
+      stopBtn.onclick = () => viewer?.stopPlayback();
+      fpsEl.onchange = () => {
+        if (viewer) viewer.fps = Number(fpsEl.value) || 30;
+      };
+
+      document.getElementById("loadBtn").onclick = async () => {
+        if (viewer) {
+          viewer.dispose();
+          viewer = null;
+        }
+        setTransport(false);
+        logEl.textContent = "";
+
+        let source;
+        if (localFiles && localFiles.length) {
+          source = createFileMapSource(localFiles);
+          log(`Using local folder (${source.listBasenames().length} assets under compression root).`);
+        } else {
+          const baseUrl = baseUrlEl.value.trim() || presetEl.value;
+          if (!baseUrl) {
+            alert("Choose a bundled example, enter a URL, or pick a local folder.");
+            return;
+          }
+          // Relative paths must resolve against this demo page, not the site root.
+          const resolved = new URL(baseUrl, window.location.href).href;
+          source = createUrlSource(resolved);
+          log(`Fetching: ${resolved}`);
+          if (window.location.protocol === "file:") {
+            log(
+              "Warning: file:// often blocks fetch of sibling folders. " +
+                "Use “pick a local drive folder” or serve with: python -m http.server",
+            );
+          }
+        }
+
+        const canvas = document.getElementById("c");
+        viewer = new GSCodecViewer(canvas, {
+          source,
+          maxSplats: Number(document.getElementById("maxSplats").value) || 400000,
+          fps: Number(fpsEl.value) || 30,
+          onFrame: showFrame,
+        });
+        try {
+          await viewer.load(log);
+          viewer.start();
+          setTransport(viewer.numFrames > 1);
+          showFrame(viewer.frameIndex, viewer.numFrames, false);
+          log(
+            `Decoded ${viewer.numFrames} frame(s). ` +
+              (viewer.numFrames > 1
+                ? "Play loops the frames. Drag to orbit, wheel to zoom."
+                : "Only one frame, so playback stays on that frame."),
+          );
+          if (viewer.lastScaleReport) log(viewer.lastScaleReport);
+        } catch (e) {
+          console.error(e);
+          log(String(e.message || e));
+        }
+      };
+    </script>
+  </body>
+</html>
